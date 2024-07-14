@@ -33,7 +33,8 @@ type measurementValues struct {
 // 	prime64  = 1099511628211
 // )
 
-// Note 1. can get the distinct count for how many cities are
+// Note 1. Need a custom hash function for the above results
+// Note 2. Need to change the Scanner in the processFile
 func Measure(fileName string) {
 	flag.Parse()
 	if *cpuProfile != "" {
