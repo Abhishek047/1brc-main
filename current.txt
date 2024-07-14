@@ -1,0 +1,114 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"runtime"
+	"runtime/pprof"
+	"time"
+
+	"golang.org/x/exp/mmap"
+)
+
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
+type measurements struct {
+	min   int32
+	max   int32
+	sum   int64
+	count uint8
+}
+
+const (
+	realDeal = "measurements.txt"
+	bigTest  = "test_10_000_000.txt"
+)
+
+func readFile() {
+	start := time.Now()
+	filepath := "./" + bigTest
+	// fileInfo, err := os.Stat(filepath)
+	// if err != nil {
+	// 	fmt.Println("Error getting file info:", err)
+	// 	return
+	// }
+	// chunkSize := fileInfo.Size() / int64(runtime.NumCPU())
+
+	reader, err := mmap.Open(filepath)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer reader.Close()
+	buffer := make([]byte, reader.Len())
+
+	_, err = reader.ReadAt(buffer, 0)
+	if err != nil {
+		fmt.Println("Error in reading:", err)
+		return
+	}
+
+	// Buffer process function
+
+	startI, colonI, loopI := -1, -1, 0
+	var num int16 = 0
+	for loopI < len(buffer) {
+		if startI == -1 {
+			startI = loopI
+		}
+		// is the current index is Semi-colon
+		if buffer[loopI] == 59 {
+			colonI = loopI
+			loopI++
+		}
+		if colonI == -1 {
+			// Do hashing here
+		} else {
+			if buffer[loopI] >= 48 && buffer[loopI] <= 57 {
+				num = (num * 10) + int16(buffer[loopI]-48)
+			}
+			if buffer[loopI] == 10 {
+				if buffer[colonI+1] == 45 {
+					fmt.Println(string(buffer[startI:colonI]), "temp is '+' -> ", 0-num)
+				} else {
+					fmt.Println(string(buffer[startI:colonI]), "temp is '+' -> ", num)
+				}
+				startI, colonI, num = -1, -1, 0
+			}
+		}
+		loopI++
+	}
+	fmt.Println("Time taken -> ", time.Since(start))
+}
+
+func main() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
+	readFile()
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		runtime.GC()    // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+	}
+}
