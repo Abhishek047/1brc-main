@@ -153,58 +153,77 @@ func processFile(
 	}
 	count := 0
 	result := make(map[string]measurementValues)
-	buffer := make([]byte, end-start)
-	_, err = reader.ReadAt(buffer, start)
-	if err != nil {
-		fmt.Println("Error in reading:", err)
-		return
-	}
-
+	bufferSize := min(1024*1204, end-start)
+	buffer := make([]byte, bufferSize)
+	// _, err = reader.ReadAt(buffer, start)
+	// if err != nil {
+	// 	fmt.Println("Error in reading:", err)
+	// 	return
+	// }
 	// Buffer process function
 	startI, colonI, loopI := -1, -1, 0
 	var num int16 = 0
+	var loops int64 = 0
 	// Processing
-	for loopI < len(buffer) {
-		if startI == -1 {
-			startI = loopI
+	// replace with end-start
+	// loopI < len(buffer)
+	for loops*bufferSize < (end - start) {
+		_, err = reader.ReadAt(buffer, start)
+		if err != nil && err != io.EOF {
+			fmt.Println("Error in reading: here", err)
+			return
 		}
-		// is the current index is Semi-colon
-		if buffer[loopI] == 59 {
-			colonI = loopI
+		fmt.Println(loops*bufferSize, end-start, " < -loops")
+		loops++
+		for loopI < len(buffer) {
+			fmt.Print(string(buffer[loopI]))
+			_, err = reader.ReadAt(buffer, start)
+			if err != nil && err != io.EOF {
+				fmt.Println("Error in reading: here", err)
+				return
+			}
+			loops++
+			if startI == -1 {
+				startI = loopI
+			}
+			// is the current index is Semi-colon
+			if buffer[loopI] == 59 {
+				colonI = loopI
+				loopI++
+			}
+			if colonI == -1 {
+				// Do hashing here
+			} else {
+				if buffer[loopI] >= 48 && buffer[loopI] <= 57 {
+					num = (num * 10) + int16(buffer[loopI]-48)
+				}
+				if buffer[loopI] == 10 {
+					count++
+					var temp int16 = 0
+					if buffer[colonI+1] == 45 {
+						temp = 0 - num
+					} else {
+						temp = num
+					}
+					value, ok := result[string(buffer[startI:colonI])]
+					if ok {
+						value.count++
+						if value.max < temp {
+							value.max = temp
+						}
+						if value.min > temp {
+							value.min = temp
+						}
+						value.sum = value.sum + int64(temp)
+						result[string(buffer[startI:colonI])] = value
+					} else {
+						result[string(buffer[startI:colonI])] = measurementValues{count: 1, max: temp, min: temp, sum: int64(temp)}
+					}
+					startI, colonI, num = -1, -1, 0
+				}
+			}
 			loopI++
 		}
-		if colonI == -1 {
-			// Do hashing here
-		} else {
-			if buffer[loopI] >= 48 && buffer[loopI] <= 57 {
-				num = (num * 10) + int16(buffer[loopI]-48)
-			}
-			if buffer[loopI] == 10 {
-				count++
-				var temp int16 = 0
-				if buffer[colonI+1] == 45 {
-					temp = 0 - num
-				} else {
-					temp = num
-				}
-				value, ok := result[string(buffer[startI:colonI])]
-				if ok {
-					value.count++
-					if value.max < temp {
-						value.max = temp
-					}
-					if value.min > temp {
-						value.min = temp
-					}
-					value.sum = value.sum + int64(temp)
-					result[string(buffer[startI:colonI])] = value
-				} else {
-					result[string(buffer[startI:colonI])] = measurementValues{count: 1, max: temp, min: temp, sum: int64(temp)}
-				}
-				startI, colonI, num = -1, -1, 0
-			}
-		}
-		loopI++
 	}
 	if colonI > 0 {
 		count++
