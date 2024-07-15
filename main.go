@@ -19,9 +19,9 @@ const (
 func main() {
 	// brc.First(realDeal)
 	// brc.First(bigTest)
-	brc.Measure(small)
+	// brc.Measure(small)
 	// brc.Measure(bigTest)
-	// brc.Measure(realDeal)
+	brc.Measure(realDeal)
 }
 
 // go tool pprof -http=:8080 ./cpu.prof

@@ -1,7 +1,6 @@
 package brc
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -34,7 +33,7 @@ type measurementValues struct {
 // )
 
 // Note 1. Need a custom hash function for the above results
-// Note 2. Need to change the Scanner in the processFile
+// Note 2. Need to change the Scanner in the
 func Measure(fileName string) {
 	flag.Parse()
 	if *cpuProfile != "" {
@@ -162,136 +161,104 @@ func processFile(
 	file, err := os.Open(filePath)
 	defer wg.Done()
 	defer file.Close()
-	// buckets := make([]hashItem, numBuckets)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
 		return
 	}
 	count := 0
 	result := make(map[string]measurementValues)
-	f := io.LimitedReader{R: file, N: end - start}
-
 	_, err = file.Seek(start, 0)
 	if err != nil {
 		panic(err)
 	}
-	scanner := bufio.NewScanner(&f)
-	for scanner.Scan() {
-		bytes := scanner.Bytes()
-		if len(bytes) == 0 {
-			break
+	bufferSize := 1024 * 1024
+	if filePath == "./test_100.txt" {
+		bufferSize = 250
+	}
+	buffer := make([]byte, bufferSize)
+	var i int64 = 0
+	var num int16 = 0
+	isNeg, ciFound := false, false
+	name := make([]byte, 50)
+	nameI := 0
+	for i < (end - start) {
+		_, err = file.Read(buffer)
+		if err != nil && err != io.EOF {
+			panic(err)
 		}
-		var temp int16 = 0
-		var num int16 = 1
-		for i := len(bytes) - 2; i >= 0; i-- {
-			if bytes[i] == 59 {
-
-				value, ok := result[string(bytes[:i])]
-				if ok {
-					value.count++
-					if value.max < temp {
-						value.max = temp
-					}
-					if value.min > temp {
-						value.min = temp
-					}
-					value.sum = value.sum + int64(temp)
-					result[string(bytes[:i])] = value
-				} else {
-					count++
-					result[string(bytes[:i])] = measurementValues{count: 1, max: temp, min: temp, sum: int64(temp)}
-				}
+		j := 0
+		for j < len(buffer) {
+			if i >= (end - start) {
 				break
+			}
+			char := buffer[j]
+			if char == 59 {
+				ciFound = true
+				i++
+				j++
+				continue
+			}
+			if char == 45 {
+				isNeg = true
+				i++
+				j++
+				continue
+			}
+			if !ciFound {
+				// hashing for 4
+				name[nameI] = char
+				nameI++
 			} else {
-				if bytes[i] != 46 && bytes[i] != 45 {
-					temp = int16(num*int16(bytes[i]-48)) + temp
-					num *= 10
+				if char >= 48 && char <= 57 {
+					num = (num * 10) + int16(char-48)
 				}
-				if bytes[i] == 45 {
-					temp = 0 - temp
+				if char == 10 && ciFound {
+					count++
+					if isNeg {
+						num = -num
+					}
+					value, ok := result[string(name[:nameI])]
+					if ok {
+						value.count++
+						if value.max < num {
+							value.max = num
+						}
+						if value.min > num {
+							value.min = num
+						}
+						value.sum = value.sum + int64(num)
+						result[string(name[:nameI])] = value
+					} else {
+						result[string(name[:nameI])] = measurementValues{count: 1, max: num, min: num, sum: int64(num)}
+					}
+					nameI, num, ciFound = 0, 0, false
 				}
 			}
+			i++
+			j++
 		}
 	}
-	// Processing
-	// replace with end-start
-	// for loops*bufferSize < (end - start) {
-	// 	_, err = file.Read(buffer)
-	// 	if err != nil && err != io.EOF {
-	// 		fmt.Println("Error in reading: here", err)
-	// 		return
-	// 	}
-	// 	loops++
-	// 	for loopI < len(buffer) {
-	// 		if start == 0 {
-	// 			fmt.Print(string(buffer[loopI]))
-	// 		}
-	// 		if startI == -1 {
-	// 			startI = loopI
-	// 		}
-	// 		// is the current index is Semi-colon
-	// 		if buffer[loopI] == 59 {
-	// 			colonI = loopI
-	// 			loopI++
-	// 		}
-	// 		if colonI == -1 {
-	// 			// Do hashing here
-	// 		} else {
-	// 			if buffer[loopI] >= 48 && buffer[loopI] <= 57 {
-	// 				num = (num * 10) + int16(buffer[loopI]-48)
-	// 			}
-	// 			if buffer[loopI] == 10 {
-	// 				count++
-	// 				var temp int16 = 0
-	// 				if buffer[colonI+1] == 45 {
-	// 					temp = 0 - num
-	// 				} else {
-	// 					temp = num
-	// 				}
-	// 				value, ok := result[string(buffer[startI:colonI])]
-	// 				if ok {
-	// 					value.count++
-	// 					if value.max < temp {
-	// 						value.max = temp
-	// 					}
-	// 					if value.min > temp {
-	// 						value.min = temp
-	// 					}
-	// 					value.sum = value.sum + int64(temp)
-	// 					result[string(buffer[startI:colonI])] = value
-	// 				} else {
-	// 					result[string(buffer[startI:colonI])] = measurementValues{count: 1, max: temp, min: temp, sum: int64(temp)}
-	// 				}
-	// 				startI, colonI, num = -1, -1, 0
-	// 			}
-	// 		}
-	// 		loopI++
-	// 	}
-	// }
-	// if colonI > 0 {
-	// 	count++
-	// 	var temp int16 = 0
-	// 	if buffer[colonI+1] == 45 {
-	// 		temp = 0 - num
-	// 	} else {
-	// 		temp = num
-	// 	}
-	// 	value, ok := result[string(buffer[startI:colonI])]
-	// 	if ok {
-	// 		value.count++
-	// 		if value.max < temp {
-	// 			value.max = temp
-	// 		}
-	// 		if value.min > temp {
-	// 			value.min = temp
-	// 		}
-	// 		value.sum = value.sum + int64(temp)
-	// 		result[string(buffer[startI:colonI])] = value
-	// 	} else {
-	// 		result[string(buffer[startI:colonI])] = measurementValues{count: 1, max: temp, min: temp, sum: int64(temp)}
-	// 	}
-	// 	startI, colonI, num = -1, -1, 0
-	// }
+	if ciFound {
+		count++
+		if isNeg {
+			num = -num
+		}
+		value, ok := result[string(name[:nameI])]
+		if ok {
+			value.count++
+			if value.max < num {
+				value.max = num
+			}
+			if value.min > num {
+				value.min = num
+			}
+			value.sum = value.sum + int64(num)
+			result[string(name[:nameI])] = value
+		} else {
+			result[string(name[:nameI])] = measurementValues{count: 1, max: num, min: num, sum: int64(num)}
+		}
+		nameI, num, ciFound = 0, 0, false
+	}
 	fmt.Println(count)
 	chanResult <- result
 }
