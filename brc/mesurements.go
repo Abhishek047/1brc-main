@@ -1,7 +1,6 @@
 package brc
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -25,6 +24,7 @@ type measurementValues struct {
 
 type hashItem struct {
 	val   []byte
+	sum   uint64
 	stats *measurementValues
 }
 
@@ -181,7 +181,7 @@ func processFile(
 	isNeg, ciFound := false, false
 	name := make([]byte, 50)
 	nameI, collision := 0, 0
-	var hash uint64 = offset64
+	var hash, strSum uint64 = offset64, 1
 	for i < (end - start) {
 		_, err = file.Read(buffer)
 		if err != nil && err != io.EOF {
@@ -207,6 +207,7 @@ func processFile(
 			}
 			if !ciFound {
 				name[nameI] = char
+				strSum += uint64(nameI) * uint64(char)
 				hash ^= uint64(char)
 				hash *= prime64
 				nameI++
@@ -226,6 +227,7 @@ func processFile(
 							copy(key, name[:nameI])
 							hashTable[hashIndex] = hashItem{
 								val: key,
+								sum: strSum,
 								stats: &measurementValues{
 									count: 1, max: num, min: num, sum: int64(num),
 								},
@@ -239,7 +241,7 @@ func processFile(
 						} else {
 							collision++
 						}
-						if bytes.Equal(hashTable[hashIndex].val, name[:nameI]) {
+						if hashTable[hashIndex].sum == strSum {
 							s := hashTable[hashIndex].stats
 							s.min = min(s.min, num)
 							s.max = max(s.max, num)
@@ -253,7 +255,7 @@ func processFile(
 						}
 					}
 					nameI, num, ciFound = 0, 0, false
-					hash = offset64
+					hash, strSum = offset64, 1
 				}
 			}
 			i++
@@ -272,6 +274,7 @@ func processFile(
 				copy(key, name[:nameI])
 				hashTable[hashIndex] = hashItem{
 					val: key,
+					sum: strSum,
 					stats: &measurementValues{
 						count: 1, max: num, min: num, sum: int64(num),
 					},
@@ -284,7 +287,7 @@ func processFile(
 			} else {
 				collision++
 			}
-			if bytes.Equal(hashTable[hashIndex].val, name[:nameI]) {
+			if hashTable[hashIndex].sum == strSum {
 				s := hashTable[hashIndex].stats
 				s.min = min(s.min, num)
 				s.max = max(s.max, num)
