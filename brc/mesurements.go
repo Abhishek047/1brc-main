@@ -1,6 +1,7 @@
 package brc
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -22,18 +23,16 @@ type measurementValues struct {
 	count uint16
 }
 
-// type hashItem struct {
-// 	val   []byte
-// 	stats *measurementValues
-// }
+type hashItem struct {
+	val   []byte
+	stats *measurementValues
+}
 
-// const (
-// 	offset64 = 14695981039346656037
-// 	prime64  = 1099511628211
-// )
+const (
+	offset64 = 14695981039346656037
+	prime64  = 1099511628211
+)
 
-// Note 1. Need a custom hash function for the above results
-// Note 2. Need to change the Scanner in the
 func Measure(fileName string) {
 	flag.Parse()
 	if *cpuProfile != "" {
@@ -71,11 +70,10 @@ func readFile(fileName string) {
 		return
 	}
 	// constants for file splitting
-	numGoRoutines := runtime.NumCPU() * 4
+	numGoRoutines := runtime.NumCPU() * 2
 	if fileInfo.Size() < 4096*4096 {
 		numGoRoutines = 2
 	}
-	// baseChunkSize := 4096 * 4096
 	baseChunkSize := fileInfo.Size() / int64(numGoRoutines)
 
 	var wg sync.WaitGroup
@@ -165,8 +163,10 @@ func processFile(
 		fmt.Println("Error opening file:", err)
 		return
 	}
+	numBucket := 1 << 17
+	hashTable := make([]hashItem, numBucket)
+	tableSize := 0
 	count := 0
-	result := make(map[string]measurementValues)
 	_, err = file.Seek(start, 0)
 	if err != nil {
 		panic(err)
@@ -180,7 +180,8 @@ func processFile(
 	var num int16 = 0
 	isNeg, ciFound := false, false
 	name := make([]byte, 50)
-	nameI := 0
+	nameI, collision := 0, 0
+	var hash uint64 = offset64
 	for i < (end - start) {
 		_, err = file.Read(buffer)
 		if err != nil && err != io.EOF {
@@ -205,10 +206,12 @@ func processFile(
 				continue
 			}
 			if !ciFound {
-				// hashing for 4
 				name[nameI] = char
+				hash ^= uint64(char)
+				hash *= prime64
 				nameI++
 			} else {
+				hashIndex := int(hash & uint64(numBucket-1))
 				if char >= 48 && char <= 57 {
 					num = (num * 10) + int16(char-48)
 				}
@@ -217,21 +220,40 @@ func processFile(
 					if isNeg {
 						num = -num
 					}
-					value, ok := result[string(name[:nameI])]
-					if ok {
-						value.count++
-						if value.max < num {
-							value.max = num
+					for {
+						if hashTable[hashIndex].val == nil {
+							key := make([]byte, len(name[:nameI]))
+							copy(key, name[:nameI])
+							hashTable[hashIndex] = hashItem{
+								val: key,
+								stats: &measurementValues{
+									count: 1, max: num, min: num, sum: int64(num),
+								},
+							}
+							tableSize++
+							if tableSize > numBucket/2 {
+								fmt.Println(tableSize, numBucket, string(key))
+								panic("too many items in hash table")
+							}
+							break
+						} else {
+							collision++
 						}
-						if value.min > num {
-							value.min = num
+						if bytes.Equal(hashTable[hashIndex].val, name[:nameI]) {
+							s := hashTable[hashIndex].stats
+							s.min = min(s.min, num)
+							s.max = max(s.max, num)
+							s.sum += int64(num)
+							s.count++
+							break
 						}
-						value.sum = value.sum + int64(num)
-						result[string(name[:nameI])] = value
-					} else {
-						result[string(name[:nameI])] = measurementValues{count: 1, max: num, min: num, sum: int64(num)}
+						hashIndex++
+						if hashIndex >= numBucket {
+							hashIndex = 0
+						}
 					}
 					nameI, num, ciFound = 0, 0, false
+					hash = offset64
 				}
 			}
 			i++
@@ -243,23 +265,54 @@ func processFile(
 		if isNeg {
 			num = -num
 		}
-		value, ok := result[string(name[:nameI])]
-		if ok {
-			value.count++
-			if value.max < num {
-				value.max = num
+		hashIndex := int(hash & uint64(numBucket-1))
+		for {
+			if hashTable[hashIndex].val == nil {
+				key := make([]byte, len(name[:nameI]))
+				copy(key, name[:nameI])
+				hashTable[hashIndex] = hashItem{
+					val: key,
+					stats: &measurementValues{
+						count: 1, max: num, min: num, sum: int64(num),
+					},
+				}
+				tableSize++
+				if tableSize > numBucket/2 {
+					panic("too many items in hash table")
+				}
+				break
+			} else {
+				collision++
 			}
-			if value.min > num {
-				value.min = num
+			if bytes.Equal(hashTable[hashIndex].val, name[:nameI]) {
+				s := hashTable[hashIndex].stats
+				s.min = min(s.min, num)
+				s.max = max(s.max, num)
+				s.sum += int64(num)
+				s.count++
+				break
 			}
-			value.sum = value.sum + int64(num)
-			result[string(name[:nameI])] = value
-		} else {
-			result[string(name[:nameI])] = measurementValues{count: 1, max: num, min: num, sum: int64(num)}
+			hashIndex++
+			if hashIndex >= numBucket {
+				hashIndex = 0
+			}
 		}
 		nameI, num, ciFound = 0, 0, false
+		hash = offset64
 	}
-	fmt.Println(count)
+	result := make(map[string]measurementValues, tableSize)
+	for _, value := range hashTable {
+		if value.val == nil {
+			continue
+		}
+		result[string(value.val)] = measurementValues{
+			max:   value.stats.max,
+			min:   value.stats.min,
+			count: value.stats.count,
+			sum:   value.stats.sum,
+		}
+	}
+	fmt.Println(count, "total")
 	chanResult <- result
 }
 
