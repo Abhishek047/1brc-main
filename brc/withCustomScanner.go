@@ -1,68 +1,18 @@
 package brc
 
 import (
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"runtime"
-	"runtime/pprof"
 	"sync"
 	"time"
 )
 
-var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to `file`")
-var memProfile = flag.String("memprofile", "", "write memory profile to `file`")
-
-type measurementValues struct {
-	min   int16
-	max   int16
-	sum   int64
-	count uint16
+func Fourth(fileName string) {
+	readFileT4(fileName)
 }
-
-// type hashItem struct {
-// 	val   []byte
-// 	stats *measurementValues
-// }
-
-// const (
-// 	offset64 = 14695981039346656037
-// 	prime64  = 1099511628211
-// )
-
-// Note 1. Need a custom hash function for the above results
-// Note 2. Need to change the Scanner in the
-func Measure(fileName string) {
-	flag.Parse()
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatal("could not create CPU profile: ", err)
-		}
-		defer f.Close() // error handling omitted for example
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal("could not start CPU profile: ", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-
-	readFile(fileName)
-	time.Sleep(time.Second)
-	if *memProfile != "" {
-		f, err := os.Create(*memProfile)
-		if err != nil {
-			log.Fatal("could not create memory profile: ", err)
-		}
-		defer f.Close() // error handling omitted for example
-		runtime.GC()    // get up-to-date statistics
-		if err := pprof.WriteHeapProfile(f); err != nil {
-			log.Fatal("could not write memory profile: ", err)
-		}
-	}
-}
-func readFile(fileName string) {
+func readFileT4(fileName string) {
 	start := time.Now()
 	filepath := "./" + fileName
 	fileInfo, err := os.Stat(filepath)
@@ -106,12 +56,12 @@ func readFile(fileName string) {
 				fmt.Println("Error in chunk read -> ", loopMainI, err)
 				return
 			}
-			lastNewLinePos := findLastNewLine(&tempBuffer)
+			lastNewLinePos := findLastNewLineT4(&tempBuffer)
 			fileEnd = int64(lastNewLinePos) + tempFileEnd + 1
 		}
 		// fmt.Printf("running for %v, from %v to %v  \n", loopMainI, fileStart, fileEnd)
 		wg.Add(1)
-		go processFile(filepath, fileStart, fileEnd, &wg, allChanResults)
+		go processFileT4(filepath, fileStart, fileEnd, &wg, allChanResults)
 		fileStart = fileEnd
 		loopMainI++
 	}
@@ -151,7 +101,7 @@ func readFile(fileName string) {
 	close(allChanResults)
 }
 
-func processFile(
+func processFileT4(
 	filePath string,
 	start int64,
 	end int64,
@@ -263,7 +213,7 @@ func processFile(
 	chanResult <- result
 }
 
-func findLastNewLine(buffer *[]byte) int {
+func findLastNewLineT4(buffer *[]byte) int {
 	for i := len(*buffer) - 1; i >= 0; i-- {
 		if (*buffer)[i] == '\n' {
 			return i

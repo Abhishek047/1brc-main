@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-type stats struct {
-	min   float64
-	max   float64
-	sum   float64
+type intStats struct {
+	min   int16
+	max   int16
+	sum   int64
 	count uint16
 }
 
-func First(fileName string) {
+func Second(fileName string) {
 	runFor := 0
 	filepath := "./" + fileName
 
@@ -27,7 +27,7 @@ func First(fileName string) {
 	start := time.Now()
 	defer file.Close()
 	reader := bufio.NewReader(file)
-	result := make(map[string]stats)
+	result := make(map[string]intStats)
 	for {
 		// str is a line split on new line
 		str, err := reader.ReadString('\n')
@@ -40,11 +40,10 @@ func First(fileName string) {
 		}
 		// index of ;
 		n := 1
-		var temp float64 = 0
+		var temp int16 = 0
 		for i := len(str) - 2; i >= 0; i-- {
 			if str[i] == 59 {
 				value, ok := result[string(str[:i])]
-				temp = temp * 0.1
 				if ok {
 					value.count++
 					if value.max < temp {
@@ -53,15 +52,15 @@ func First(fileName string) {
 					if value.min > temp {
 						value.min = temp
 					}
-					value.sum = value.sum + float64(temp)
+					value.sum = value.sum + int64(temp)
 					result[string(str[:i])] = value
 				} else {
-					result[string(str[:i])] = stats{count: 1, max: temp, min: temp, sum: float64(temp)}
+					result[string(str[:i])] = intStats{count: 1, max: temp, min: temp, sum: int64(temp)}
 				}
 				break
 			} else {
 				if str[i] != 46 && str[i] != 45 {
-					temp = float64(n*int(str[i]-48)) + temp
+					temp = int16(n*int(str[i]-48)) + temp
 					n *= 10
 				}
 				if str[i] == 45 {
@@ -70,14 +69,13 @@ func First(fileName string) {
 			}
 		}
 		runFor++
+		// if runFor == 100 {
+		// 	break
+		// }
 	}
 	fmt.Printf("%s took %v\n", "main", time.Since(start))
-	// for key, val := range result {
-	// 	fmt.Println("count ", val.count)
-	// 	fmt.Printf("key : %s, min: %.1f, max: %.1f, avg: %.1f \n", key, float64(val.min)*0.1, float64(val.max)*0.1, float64(val.sum/int64(val.count))*0.1)
-	// }
 	for key, val := range result {
-		fmt.Printf("key : %s, min: %.1f, max: %.1f, avg: %.1f \n", key, val.min, val.max, val.sum/float64(val.count))
+		fmt.Printf("key : %s, min: %.1f, max: %.1f, avg: %.1f \n", key, float64(val.min)*0.1, float64(val.max)*0.1, float64(val.sum/int64(val.count))*0.1)
 	}
 	fmt.Printf("%s took %v\n for results -> %d ", "main", time.Since(start), runFor)
 }

@@ -1,19 +1,13 @@
 package brc
 
 import (
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"runtime"
-	"runtime/pprof"
 	"sync"
 	"time"
 )
-
-var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to `file`")
-var memProfile = flag.String("memprofile", "", "write memory profile to `file`")
 
 type measurementValues struct {
 	min   int16
@@ -34,32 +28,7 @@ const (
 )
 
 func Measure(fileName string) {
-	flag.Parse()
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatal("could not create CPU profile: ", err)
-		}
-		defer f.Close() // error handling omitted for example
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal("could not start CPU profile: ", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-
 	readFile(fileName)
-	time.Sleep(time.Second)
-	if *memProfile != "" {
-		f, err := os.Create(*memProfile)
-		if err != nil {
-			log.Fatal("could not create memory profile: ", err)
-		}
-		defer f.Close() // error handling omitted for example
-		runtime.GC()    // get up-to-date statistics
-		if err := pprof.WriteHeapProfile(f); err != nil {
-			log.Fatal("could not write memory profile: ", err)
-		}
-	}
 }
 func readFile(fileName string) {
 	start := time.Now()
@@ -133,17 +102,17 @@ func readFile(fileName string) {
 		}
 		fmt.Println("Joining Done!")
 		fmt.Println("Time taken before print-> ", time.Since(start))
-		// for key, station := range totalStations {
-		// 	var avg int64 = 0
-		// 	if station.sum != 0 {
-		// 		avg = station.sum / int64(station.count)
-		// 	} else {
-		// 		fmt.Println(key, station)
-		// 		fmt.Scanln()
-		// 	}
-		// 	fmt.Printf("key : %s, min: %.1f, max: %.1f, avg: %.1f \n", key, float64(station.min)*0.1, float64(station.max)*0.1, float64(avg)*0.1)
-		// }
-		// fmt.Println("Time taken -> ", time.Since(start))
+		for key, station := range totalStations {
+			var avg int64 = 0
+			if station.sum != 0 {
+				avg = station.sum / int64(station.count)
+			} else {
+				fmt.Println(key, station)
+				fmt.Scanln()
+			}
+			fmt.Printf("key : %s, min: %.1f, max: %.1f, avg: %.1f \n", key, float64(station.min)*0.1, float64(station.max)*0.1, float64(avg)*0.1)
+		}
+		fmt.Println("Time taken -> ", time.Since(start))
 	}()
 	wg.Wait()
 	close(allChanResults)
